@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>БЕЗЫМЯННАЯ</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+html,body{height:100%;background:#0d1117;color:#e6edf3;overflow:hidden}
+.app{display:flex;flex-direction:column;height:100vh;max-width:760px;margin:0 auto;background:#0d1117}
+header{padding:10px 14px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:10px;flex-shrink:0}
+header .dot{width:8px;height:8px;border-radius:50%;background:#484f58;flex-shrink:0;transition:.3s}
+header .dot.active{background:#3fb950;box-shadow:0 0 6px rgba(63,185,80,.5)}
+header h1{font-size:14px;font-weight:700;letter-spacing:2px;color:#e6edf3;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hbtns{margin-left:auto;display:flex;gap:8px;flex-shrink:0}
+.hbtn{font-size:12px;color:#58a6ff;text-decoration:none;background:#21262d;border:1px solid #30363d;padding:6px 10px;border-radius:8px;display:flex;align-items:center;gap:5px;cursor:pointer}
+.hbtn:hover{background:#30363d}
+.hbtn input{display:none}
+.chat{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;background:#0d1117}
+.msg{max-width:88%;padding:9px 13px;border-radius:14px;font-size:14px;line-height:1.45;word-wrap:break-word;white-space:pre-wrap}
+.msg.user{align-self:flex-end;background:#1f6feb;color:#fff;border-bottom-right-radius:4px}
+.msg.bot{align-self:flex-start;background:#21262d;color:#e6edf3;border:1px solid #30363d;border-bottom-left-radius:4px}
+.codeblock{background:#161b22;border:1px solid #30363d;border-radius:10px;margin-top:8px;overflow:hidden;white-space:normal}
+.codehead{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#21262d;border-bottom:1px solid #30363d;font-size:11px;color:#8b949e}
+.codehead button{background:#238636;color:#fff;border:none;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer}
+.codehead button:disabled{background:#30363d;color:#8b949e;cursor:not-allowed}
+pre{padding:10px;overflow-x:auto;font-size:11px;line-height:1.5;font-family:'SF Mono',Menlo,Consolas,monospace;color:#7ee787;max-height:220px}
+.preview{display:none;border-top:1px solid #30363d;background:#fff}
+.preview iframe{width:100%;height:260px;border:none;display:block}
+.input-bar{padding:10px 12px;border-top:1px solid #30363d;display:flex;gap:8px;flex-shrink:0;background:#161b22}
+.input-bar input{flex:1;background:#0d1117;border:1px solid #30363d;color:#e6edf3;padding:10px 14px;border-radius:18px;font-size:14px;outline:none;min-width:0}
+.input-bar input:focus{border-color:#58a6ff}
+.input-bar button{background:#238636;color:#fff;border:none;padding:0 18px;border-radius:18px;font-size:14px;font-weight:600;cursor:pointer;flex-shrink:0}
+.input-bar button:active{transform:scale(.95)}
+.welcome{text-align:center;color:#8b949e;font-size:13px;padding:40px 16px;line-height:1.7}
+.welcome b{color:#e6edf3;letter-spacing:2px;display:block;font-size:16px;margin-bottom:6px}
+.welcome a{color:#58a6ff;text-decoration:none}
+.typing{display:inline-flex;gap:4px;padding:10px 14px;background:#21262d;border:1px solid #30363d;border-radius:14px;align-self:flex-start}
+.typing span{width:6px;height:6px;border-radius:50%;background:#58a6ff;animation:blink 1.4s infinite}
+.typing span:nth-child(2){animation-delay:.2s}
+.typing span:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,60%,100%{opacity:.3}30%{opacity:1}}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-thumb{background:#30363d;border-radius:3px}
+</style>
+</head>
+<body>
+<div class="app">
+ <header>
+  <div class="dot" id="statusDot"></div>
+  <h1 id="headerName">БЕЗЫМЯННАЯ</h1>
+  <div class="hbtns">
+   <label class="hbtn">📂 JSON<input type="file" id="modelUpload" accept=".json"></label>
+   <a class="hbtn" href="https://t.me/WhiteKitsuneAI" target="_blank">✈ Канал</a>
+  </div>
+ </header>
+ <div class="chat" id="chat">
+  <div class="welcome">
+   <b>БЕЗЫМЯННАЯ</b>
+   Загрузи JSON-модель кнопкой «📂 JSON» выше.<br>
+   Модели: <a href="https://t.me/WhiteKitsuneAI" target="_blank">@WhiteKitsuneAI</a>
+  </div>
+ </div>
+ <div class="input-bar">
+  <input type="text" id="userInput" placeholder="Сообщение..." autocomplete="off" disabled>
+  <button id="sendBtn" onclick="send()" disabled>➤</button>
+ </div>
+</div>
+
+<script>
+function cleanKeys(o){if(Array.isArray(o))return o.map(cleanKeys);if(o!==null&&typeof o==='object')return Object.keys(o).reduce((a,k)=>{a[k.trim()]=cleanKeys(o[k]);return a},{});return typeof o==='string'?o.trim():o}
+
+let MODEL=null,trained=null;
+const chat=document.getElementById('chat'),input=document.getElementById('userInput'),sendBtn=document.getElementById('sendBtn'),headerName=document.getElementById('headerName'),statusDot=document.getElementById('statusDot');
+
+document.getElementById('modelUpload').addEventListener('change',function(e){
+ const f=e.target.files[0];if(!f)return;
+ const r=new FileReader();
+ r.onload=ev=>{
+  try{
+   MODEL=cleanKeys(JSON.parse(ev.target.result));
+   if(!MODEL.name||!MODEL.entries)throw new Error('Нет полей name/entries');
+   headerName.textContent=MODEL.name.toUpperCase().replace(/(БЫСТРАЯ|МОДЕЛЬ|V?\d+\.\d+)/gi,'').trim()||'БЕЗЫМЯННАЯ';
+   statusDot.classList.add('active');
+   buildTrained();
+   chat.innerHTML='';
+   input.disabled=false;sendBtn.disabled=false;input.focus();
+   addMsg('Модель «'+MODEL.name+'» загружена. Можно писать вопросы, просить код (напр. «напиши код html про кораблик») или «найди информацию о python».', 'bot');
+  }catch(err){alert('Ошибка JSON: '+err.message)}
+ };
+ r.readAsText(f);
+});
+
+// ===== ГЕНЕРАТОР КОДА (фикс бага со скрина) =====
+function detectCodeIntent(q){
+ const l=q.toLowerCase();
+ if(!/(напиши|сделай|создай)[^а-яa-z]*(код|html|игр|сайт)|код на|html про|на языке/.test(l))return null;
+ const theme=l.match(/про ([а-яёa-z0-9\- ]+)/i);
+ const t=theme?theme[1].trim():'анимация';
+ let emoji='✨',bg='linear-gradient(180deg,#87ceeb,#1e90ff)';
+ if(/кораблик|лодк|яхт|море|океан|парус/.test(l)){emoji='⛵';bg='linear-gradient(180deg,#87ceeb 45%,#0077be 45%,#004e92)'}
+ else if(/мяч|футбол|баскетбол/.test(l)){emoji='⚽';bg='linear-gradient(180deg,#87ceeb,#2e8b57)'}
+ else if(/космос|ракета|звезд|планет/.test(l)){emoji='🚀';bg='linear-gradient(180deg,#0b0b2a,#2b2b5e)'}
+ else if(/машин|авто|тачка/.test(l)){emoji='🚗';bg='linear-gradient(180deg,#87ceeb,#555)'}
+ return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>${t}</title>
+<style>
+body{margin:0;height:100vh;overflow:hidden;background:${bg};display:flex;align-items:center;justify-content:center;flex-direction:column;font-family:sans-serif}
+.obj{font-size:80px;animation:float 2s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0) rotate(-5deg)}50%{transform:translateY(-25px) rotate(5deg)}}
+.wave{position:absolute;bottom:0;width:200%;height:60px;background:rgba(255,255,255,.25);border-radius:50%;animation:wave 3s linear infinite}
+@keyframes wave{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+h3{color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.4);margin-top:20px}
+</style></head>
+<body>
+<div class="obj">${emoji}</div>
+<h3>${t}</h3>
+<div class="wave"></div>
+</body></html>`;
+}
+
+function tok(s){let w=(s||'').toLowerCase().replace(/[^a-zа-яё0-9\s]/gi,' ').split(/\s+/).filter(x=>x.length>2);if(MODEL&&MODEL.shortWordExceptions){(s||'').toLowerCase().replace(/[^a-zа-яё0-9\s]/gi,' ').split(/\s+/).forEach(x=>{if(MODEL.shortWordExceptions.includes(x)&&!w.includes(x))w.push(x)})}return w}
+
+function checkSafety(text){const l=(text||'').toLowerCase();const b=MODEL.safety?MODEL.safety.blocked:[];const a=MODEL.safety?MODEL.safety.allowedContext:[];for(const w of b){if(l.includes(w)){let ok=false;for(const c of a)if(l.includes(c)){ok=true;break}if(!ok)return false}}return true}
+
+function buildTrained(){
+ const e=MODEL.entries,docs=[];
+ e.qa.forEach((p,i)=>docs.push({type:'qa',i,tok:tok(p.q)}));
+ const facts=[];e.text.forEach(t=>t.text.split(/[.!?]+\s+/).forEach(s=>{if(s.length>15)facts.push(s)}));
+ facts.forEach((s,i)=>docs.push({type:'fact',i,tok:tok(s)}));
+ const df={};docs.forEach(d=>new Set(d.tok).forEach(w=>df[w]=(df[w]||0)+1));
+ const vecs=docs.map(d=>{const tf={};d.tok.forEach(w=>tf[w]=(tf[w]||0)+1);const v={};for(const w in tf)v[w]=(tf[w]/d.tok.length)*Math.log((docs.length+1)/(1+(df[w]||0)));return{type:d.type,i:d.i,v}});
+ const mk={};const corpus=e.talk.map(t=>t.text||t).join('\n')+'\n'+e.text.map(t=>t.text).join('\n');
+ const words=corpus.toLowerCase().split(/\s+/).filter(Boolean);
+ for(let i=0;i<words.length-1;i++){if(!mk[words[i]])mk[words[i]]={};mk[words[i]][words[i+1]]=(mk[words[i]][words[i+1]]||0)+1}
+ for(const w in mk){const tot=Object.values(mk[w]).reduce((a,b)=>a+b,0);for(const n in mk[w])mk[w][n]/=tot}
+ trained={vecs,facts,mk};
+}
+
+function levenshtein(a,b){const m=a.length,n=b.length,dp=Array.from({length:m+1},()=>Array(n+1).fill(0));for(let i=0;i<=m;i++)dp[i][0]=i;for(let j=0;j<=n;j++)dp[0][j]=j;for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)dp[i][j]=a[i-1]===b[j-1]?dp[i-1][j-1]:1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]);return dp[m][n]}
+function weightedRandom(p){const r=Math.random();let s=0;for(const w in p){s+=p[w];if(r<=s)return w}return Object.keys(p)[0]}
+
+function executeAgentLoop(query){
+ if(!checkSafety(query))return{type:'blocked',text:'⛔ Запрос заблокирован фильтром безопасности.'};
+ // 1. ГЕНЕРАЦИЯ КОДА (до всего остального — фикс бага)
+ const code=detectCodeIntent(query);
+ if(code)return{type:'code',text:code};
+ const lower=query.toLowerCase();
+ // 2. tasks
+ if(MODEL.tasks)for(const task of MODEL.tasks){if(lower.includes(task.trigger)){let r='📋 Задача: '+task.description+'\n';task.steps.forEach((s,i)=>r+=(i+1)+'. ['+s.status+'] '+s.task+' → '+s.action+'\n');return{type:'agent',text:r}}}
+ // 3. codeTriggers
+ if(MODEL.codeTriggers)for(const tr of MODEL.codeTriggers){
+  if(lower.includes(tr.keyword)){
+   const arg=query.slice(query.toLowerCase().indexOf(tr.keyword)+tr.keyword.length).trim();
+   const ce=MODEL.entries.code.find(c=>c.c&&c.c.includes('function '+tr.function));
+   if(ce){try{const fn=new Function(ce.c+'\nreturn '+tr.function+'('+JSON.stringify(arg||'')+')');const res=fn();if(res&&res.then)return{type:'async',promise:res};return{type:'agent',text:String(res)}}catch(e){return{type:'agent',text:'❌ Ошибка: '+e.message}}}
+  }
+ }
+ // 4. TF-IDF
+ const qt=tok(query);let best=null,bs=0;
+ trained.vecs.forEach(v=>{let s=0;qt.forEach(w=>{if(v.v[w])s+=v.v[w]});if(s>bs){bs=s;best=v}});
+ if(best&&bs>0.5){
+  if(best.type==='qa')return{type:'normal',text:MODEL.entries.qa[best.i].a};
+  if(best.type==='fact')return{type:'normal',text:trained.facts[best.i]};
+ }
+ // 5. Марков
+ if(trained.mk&&qt.length>0){let word=qt[qt.length-1],res='';for(let i=0;i<12;i++){if(trained.mk[word]){const n=weightedRandom(trained.mk[word]);if(n==='<end>')break;if(n==='<start>')continue;res+=' '+n;word=n}else break}if(res.trim())return{type:'normal',text:res.trim()}}
+ return{type:'normal',text:'Я пока не знаю ответа на этот вопрос.'};
+}
+
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function addMsg(text,who){
+ const div=document.createElement('div');div.className='msg '+who;
+ if(who==='bot'&&text&&text.startsWith('<!DOCTYPE')){
+  div.textContent='Вот код:';
+  const block=document.createElement('div');block.className='codeblock';
+  block.innerHTML='<div class="codehead"><span>html • '+text.length+' символов</span><button onclick="togglePreview(this)" disabled>▶ Превью</button></div><pre>'+esc(text)+'</pre><div class="preview"><iframe sandbox="allow-scripts"></iframe></div>';
+  const pre=block.querySelector('pre');
+  pre.addEventListener('click',()=>{const btn=block.querySelector('button');if(btn.disabled)btn.click()});
+  div.appendChild(block);
+ }else div.textContent=text;
+ chat.appendChild(div);chat.scrollTop=chat.scrollHeight;
+}
+
+function togglePreview(btn){
+ const block=btn.closest('.codeblock'),pv=block.querySelector('.preview'),fr=block.querySelector('iframe');
+ if(pv.style.display==='block'){pv.style.display='none';btn.textContent='▶ Превью';btn.disabled=false;return}
+ const code=block.querySelector('pre').textContent.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
+ fr.srcdoc=code;pv.style.display='block';btn.textContent='✕ Закрыть';
+}
+
+async function send(){
+ const text=input.value.trim();if(!text||!MODEL)return;
+ input.value='';addMsg(text,'user');
+ const t=document.createElement('div');t.className='typing';t.innerHTML='<span></span><span></span><span></span>';chat.appendChild(t);chat.scrollTop=chat.scrollHeight;
+ await new Promise(r=>setTimeout(r,350));t.remove();
+ try{
+  const res=executeAgentLoop(text);
+  if(res.type==='async'){addMsg('⏳ Выполняю...','bot');const v=await res.promise;const ms=chat.querySelectorAll('.msg.bot');ms[ms.length-1].textContent=String(v)}
+  else addMsg(res.text,res.type==='code'?'bot':'bot');
+ }catch(e){addMsg('❌ Ошибка: '+e.message,'bot')}
+ chat.scrollTop=chat.scrollHeight;
+}
+input.addEventListener('keypress',e=>{if(e.key==='Enter')send()});
+</script>
+</body>
+</html>
